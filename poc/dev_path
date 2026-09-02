@@ -1,0 +1,82 @@
+1. Choose the proof-of-concept area
+Use a small area around Labatt rather than all of Texas. Define a bounding box large enough to test roads, towns, streams, labels, and multiple zoom levels.
+
+2. Obtain source basemap data
+Use OpenStreetMap-derived vector data as the source for roads, water, place names, land features, and other basemap content. We are not creating those layers manually.
+
+West:  -100.55
+South:   28.49
+East:   -98.3167
+North:   31.74
+
+3. Create the PMTiles basemap
+Convert the source data for the test area into a single vector PMTiles archive, something like:
+
+labatt_basemap_test.pmtiles
+
+At this point we verify locally that the file contains the expected layers and zoom levels.
+
+4. Create a MapLibre style
+Build a style JSON that tells the browser how to draw the PMTiles data: roads, water, labels, towns, land, etc. This is where we control how subdued or prominent the basemap looks beneath rainfall.
+
+5. Build a simple MapLibre test page
+Create a stripped-down page with only:
+
+the basemap
+pan
+zoom
+pinch zoom
+responsive full-screen sizing
+
+No rainfall, watershed boundaries, analytics, or controls yet.
+
+6. Test everything locally
+Confirm on the development machine that MapLibre can read the PMTiles archive, apply the style, zoom through the expected levels, and render correctly at desktop and phone-sized browser dimensions.
+
+7. Upload PMTiles and style assets to S3
+Put the basemap and related files into a clean permanent structure, for example:
+
+webmap/
+  basemap/
+    labatt_basemap_test.pmtiles
+
+  styles/
+    cfhydromet_basemap.json
+
+8. Serve the files through CloudFront
+Use the existing cfhydromet.com CloudFront architecture rather than introducing a new server. Verify that byte-range requests work correctly, since PMTiles depends on them.
+
+9. Publish the proof-of-concept page on cfhydromet.com
+Add a temporary route such as:
+
+cfhydromet.com/builds/labatt/map-test
+
+The page should load the PMTiles directly through CloudFront.
+
+10. Test on actual desktop and mobile devices
+Confirm:
+smooth pan
+smooth pinch zoom
+labels appear correctly
+tiles load as the user moves
+no awkward aspect-ratio handling
+map fills the available screen
+performance is acceptable over a normal phone connection
+
+11. Add one simple EAA/Labatt GIS overlay
+Once the basemap works, add something small such as the Labatt property boundary or watershed polygons as GeoJSON. This proves we can stack our own GIS data over the basemap.
+
+12. Declare the basemap proof of concept complete
+We are finished with this phase when we have:
+
+self-hosted PMTiles
+      +
+self-hosted style
+      +
+MapLibre
+      +
+CloudFront/S3
+      +
+desktop/mobile interactive map
+      +
+one GIS overlay
