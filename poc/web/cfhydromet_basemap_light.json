@@ -1,0 +1,1018 @@
+{
+  "version": 8,
+  "name": "CFHydromet Light v1",
+  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+  "sources": {
+    "protomaps": {
+      "type": "vector",
+      "url": "pmtiles://https://cfhydromet.com/basemaps/labatt_poc.pmtiles",
+      "attribution": "\u00a9 OpenStreetMap contributors"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f3f1e8"
+      }
+    },
+    {
+      "id": "earth",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "earth",
+      "paint": {
+        "fill-color": "#f3f1e8"
+      }
+    },
+    {
+      "id": "landuse",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "landuse",
+      "minzoom": 7,
+      "paint": {
+        "fill-color": "#e8ebe3",
+        "fill-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          7,
+          0.18,
+          10,
+          0.32,
+          14,
+          0.42
+        ]
+      }
+    },
+    {
+      "id": "water-fill",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "water",
+      "filter": [
+        "==",
+        [
+          "geometry-type"
+        ],
+        "Polygon"
+      ],
+      "paint": {
+        "fill-color": "#c7dce3",
+        "fill-opacity": 0.95
+      }
+    },
+    {
+      "id": "waterways-major",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "water",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ],
+        [
+          "match",
+          [
+            "get",
+            "kind_detail"
+          ],
+          [
+            "river",
+            "canal"
+          ],
+          true,
+          false
+        ]
+      ],
+      "minzoom": 5,
+      "paint": {
+        "line-color": "#7caebb",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          0.45,
+          8,
+          0.75,
+          11,
+          1.2,
+          14,
+          1.8
+        ],
+        "line-opacity": 0.85
+      }
+    },
+    {
+      "id": "waterways-minor",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "water",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ],
+        [
+          "match",
+          [
+            "get",
+            "kind_detail"
+          ],
+          [
+            "river",
+            "canal"
+          ],
+          false,
+          true
+        ]
+      ],
+      "minzoom": 10,
+      "paint": {
+        "line-color": "#9fc6d0",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          0.35,
+          14,
+          0.9
+        ],
+        "line-opacity": 0.68
+      }
+    },
+    {
+      "id": "boundary-county",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "boundaries",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "county"
+      ],
+      "minzoom": 5,
+      "maxzoom": 9,
+      "paint": {
+        "line-color": "#92979b",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          0.35,
+          7,
+          0.55,
+          9,
+          0.7
+        ],
+        "line-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          0.3,
+          6.5,
+          0.55,
+          8.5,
+          0.42,
+          9,
+          0.0
+        ],
+        "line-dasharray": [
+          2,
+          2
+        ]
+      }
+    },
+    {
+      "id": "boundary-state",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "boundaries",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "region"
+      ],
+      "minzoom": 3,
+      "paint": {
+        "line-color": "#666d72",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          3,
+          0.7,
+          5,
+          1.0,
+          8,
+          1.35,
+          11,
+          1.6
+        ],
+        "line-opacity": 0.82
+      }
+    },
+    {
+      "id": "boundary-country-casing",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "boundaries",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "country"
+      ],
+      "minzoom": 2,
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          2,
+          2.4,
+          5,
+          3.2,
+          8,
+          4.0,
+          11,
+          4.8
+        ],
+        "line-opacity": 0.88
+      }
+    },
+    {
+      "id": "boundary-country",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "boundaries",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "country"
+      ],
+      "minzoom": 2,
+      "paint": {
+        "line-color": "#3e454b",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          2,
+          1.15,
+          5,
+          1.55,
+          8,
+          2.0,
+          11,
+          2.35
+        ],
+        "line-opacity": 0.98
+      }
+    },
+    {
+      "id": "roads-minor",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ],
+        [
+          "match",
+          [
+            "get",
+            "kind_detail"
+          ],
+          [
+            "motorway",
+            "trunk",
+            "primary",
+            "secondary"
+          ],
+          false,
+          true
+        ]
+      ],
+      "minzoom": 9,
+      "paint": {
+        "line-color": "#c8c9c6",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.35,
+          11,
+          0.7,
+          14,
+          1.7
+        ],
+        "line-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.35,
+          12,
+          0.55,
+          14,
+          0.72
+        ]
+      }
+    },
+    {
+      "id": "roads-secondary",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "secondary"
+      ],
+      "minzoom": 7,
+      "paint": {
+        "line-color": "#b5b6b3",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          7,
+          0.45,
+          10,
+          0.9,
+          14,
+          2.1
+        ],
+        "line-opacity": 0.72
+      }
+    },
+    {
+      "id": "roads-primary-casing",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "primary"
+      ],
+      "minzoom": 6,
+      "paint": {
+        "line-color": "#f7f6f2",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          1.2,
+          9,
+          2.0,
+          12,
+          3.6,
+          14,
+          5.0
+        ],
+        "line-opacity": 0.94
+      }
+    },
+    {
+      "id": "roads-primary",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "primary"
+      ],
+      "minzoom": 6,
+      "paint": {
+        "line-color": "#8f9394",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          0.65,
+          9,
+          1.15,
+          12,
+          2.1,
+          14,
+          3.0
+        ]
+      }
+    },
+    {
+      "id": "roads-trunk-casing",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "trunk"
+      ],
+      "minzoom": 5,
+      "paint": {
+        "line-color": "#f7f6f2",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          1.6,
+          8,
+          2.5,
+          11,
+          4.2,
+          14,
+          6.0
+        ]
+      }
+    },
+    {
+      "id": "roads-trunk",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "trunk"
+      ],
+      "minzoom": 5,
+      "paint": {
+        "line-color": "#747b7e",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          0.9,
+          8,
+          1.45,
+          11,
+          2.6,
+          14,
+          3.8
+        ]
+      }
+    },
+    {
+      "id": "roads-motorway-casing",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "motorway"
+      ],
+      "minzoom": 4,
+      "paint": {
+        "line-color": "#f8f7f2",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          2.0,
+          6,
+          2.7,
+          9,
+          4.0,
+          12,
+          5.8,
+          14,
+          7.4
+        ]
+      }
+    },
+    {
+      "id": "roads-motorway",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind_detail"
+        ],
+        "motorway"
+      ],
+      "minzoom": 4,
+      "paint": {
+        "line-color": "#596268",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          1.0,
+          6,
+          1.45,
+          9,
+          2.3,
+          12,
+          3.5,
+          14,
+          4.8
+        ]
+      }
+    },
+    {
+      "id": "water-labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "water",
+      "minzoom": 7,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          7,
+          10,
+          11,
+          12,
+          14,
+          13
+        ],
+        "text-allow-overlap": false
+      },
+      "paint": {
+        "text-color": "#5e8f9e",
+        "text-halo-color": "#f3f1e8",
+        "text-halo-width": 1.25
+      }
+    },
+    {
+      "id": "interstate-shields",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "all",
+        [
+          "has",
+          "shield_text"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "network"
+          ],
+          "US:I"
+        ]
+      ],
+      "minzoom": 5,
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": [
+          "get",
+          "shield_text"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          9,
+          8,
+          10,
+          12,
+          11
+        ],
+        "text-allow-overlap": false,
+        "symbol-spacing": 280
+      },
+      "paint": {
+        "text-color": "#ffffff",
+        "text-halo-color": "#4d5a63",
+        "text-halo-width": 3.0,
+        "text-halo-blur": 0.2
+      }
+    },
+    {
+      "id": "us-highway-shields",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "filter": [
+        "all",
+        [
+          "has",
+          "shield_text"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "network"
+          ],
+          "US:US"
+        ]
+      ],
+      "minzoom": 6.5,
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": [
+          "get",
+          "shield_text"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6.5,
+          8.5,
+          10,
+          10,
+          13,
+          11
+        ],
+        "text-allow-overlap": false,
+        "symbol-spacing": 320
+      },
+      "paint": {
+        "text-color": "#4d555a",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 2.3
+      }
+    },
+    {
+      "id": "state-labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "places",
+      "filter": [
+        "match",
+        [
+          "get",
+          "kind"
+        ],
+        [
+          "region",
+          "state"
+        ],
+        true,
+        false
+      ],
+      "minzoom": 3,
+      "maxzoom": 7.5,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          3,
+          11,
+          5,
+          13,
+          7,
+          15
+        ],
+        "text-letter-spacing": 0.08,
+        "text-allow-overlap": false
+      },
+      "paint": {
+        "text-color": "#687076",
+        "text-halo-color": "#f3f1e8",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "major-city-labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "places",
+      "filter": [
+        "match",
+        [
+          "get",
+          "kind_detail"
+        ],
+        [
+          "city"
+        ],
+        true,
+        false
+      ],
+      "minzoom": 4,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          11,
+          7,
+          12.5,
+          10,
+          14,
+          13,
+          15.5
+        ],
+        "text-allow-overlap": false
+      },
+      "paint": {
+        "text-color": "#394248",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "town-labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "places",
+      "filter": [
+        "match",
+        [
+          "get",
+          "kind_detail"
+        ],
+        [
+          "town",
+          "village"
+        ],
+        true,
+        false
+      ],
+      "minzoom": 7,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          7,
+          10,
+          10,
+          11.5,
+          13,
+          13
+        ],
+        "text-allow-overlap": false
+      },
+      "paint": {
+        "text-color": "#50595e",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.35
+      }
+    },
+    {
+      "id": "other-place-labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "places",
+      "minzoom": 10,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          9.5,
+          13,
+          11.5,
+          14,
+          12
+        ],
+        "text-allow-overlap": false
+      },
+      "paint": {
+        "text-color": "#60676b",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    }
+  ]
+}

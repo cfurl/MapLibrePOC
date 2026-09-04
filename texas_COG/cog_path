@@ -1,0 +1,40 @@
+1. Understand the source data
+Start with one known Stage IV day — July 15, 2026 — and confirm exactly what the Texas parquet contains: grib_id, rainfall field, row count, rainfall range, etc.
+
+2. Reconstruct the authoritative HRAP rainfall surface
+Join the parquet to the full Texas HRAP grid by grib_id. This is still the real ~4-km Stage IV data. No invented resolution yet.
+
+3. Reproduce your existing smoothing method
+Use the method you already know looks good:
+HRAP polygons → EPSG:3857 native raster → 10× bilinear upsample → Gaussian radius 2.
+Your current mapper already follows essentially this sequence.
+
+4. Separate analysis resolution from display resolution
+The HRAP/parquet remains authoritative for calculations. The ~400-m-ish smoothed raster is explicitly a display surface, not higher-resolution rainfall observations.
+
+5. Create one statewide COG
+Instead of converting the smooth raster to millions of x/y/value dataframe rows for ggplot, write the SpatRaster directly to a Cloud Optimized GeoTIFF. That is the big architectural simplification.
+
+6. QA the COG locally
+Open it in QGIS and verify:
+no visible HRAP blocks,
+rainfall cores look reasonable,
+zero/rain boundaries behave well,
+no edge artifacts,
+no strange values introduced by smoothing.
+
+7. Learn how the COG behaves as a web asset
+Put that one July 15 COG in S3, expose it through CloudFront, and verify byte-range requests just like we did with PMTiles.
+
+8. Render rainfall in MapLibre
+Add the COG to the existing map-poc. Apply the rainfall palette, transparency, opacity, and layer ordering in the browser rather than baking those things into a PNG.
+
+9. Test interaction and devices
+Desktop and phone. Zoom way in. Pan around Texas. Check whether the smooth raster still looks convincing at the zoom levels we actually care about.
+
+10. Only then design production
+Once the July 15 surface looks excellent, determine how the production pipeline will create Texas-wide:
+daily
+7-day
+30-day
+YTD
