@@ -1,0 +1,29 @@
+1. Read Jul 10–15 Texas parquet
+             ↓
+2. Join to Texas HRAP cells
+             ↓
+3. Create six smoothed rasters
+             ↓
+4. Verify raster output
+             ↓
+5. Colorize Jul 10
+             ↓
+6. Create Jul 10 XYZ raster tiles
+             ↓
+7. Put Jul 10 in MapLibre
+             ↓
+8. Verify appearance
+             ↓
+9. Loop all six days
+             ↓
+10. Package each frame as raster PMTiles
+             ↓
+11. Create radar_frames.json
+             ↓
+12. Build A/B preload animation
+             ↓
+13. Test locally
+             ↓
+14. Put archives on S3/CloudFront
+             ↓
+15. Test on phone
