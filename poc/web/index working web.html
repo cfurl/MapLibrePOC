@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" crossorigin="anonymous" />
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/pmtiles@4/dist/pmtiles.js"></script>
+  <script src="https://unpkg.com/@geomatico/maplibre-cog-protocol/dist/index.js"></script>
 
   <style>
     html,
@@ -140,7 +141,13 @@
     // ========================================================================
     const pmtilesProtocol = new pmtiles.Protocol();
     maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile);
+    maplibregl.addProtocol("cog", MaplibreCOGProtocol.cogProtocol);
 
+    // ========================================================================
+    // JULY 15 COG
+    // ========================================================================
+    const rainfallCogUrl =
+      "https://cfhydromet.com/basemaps/rainfall/texas/daily/2026/07/07/stage4_daily.tif";
 
     // ========================================================================
     // PIECEWISE-CONTINUOUS RAINFALL STYLE
@@ -162,6 +169,87 @@
 
 			// 12"+ extreme
 	const extremeColor = "#5a003f";
+
+    function hexToRgb(hex) {
+      const clean = hex.replace("#", "");
+      return [
+        parseInt(clean.substring(0,2),16),
+        parseInt(clean.substring(2,4),16),
+        parseInt(clean.substring(4,6),16)
+      ];
+    }
+
+    function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+    function lerp(a,b,t) { return a + (b-a)*t; }
+
+    function interpolateRgb(c0,c1,t) {
+      return [
+        Math.round(lerp(c0[0],c1[0],t)),
+        Math.round(lerp(c0[1],c1[1],t)),
+        Math.round(lerp(c0[2],c1[2],t))
+      ];
+    }
+
+    rainSegments.forEach(segment => {
+      segment.rgb0 = hexToRgb(segment.start);
+      segment.rgb1 = hexToRgb(segment.end);
+    });
+
+    const extremeRgb = hexToRgb(extremeColor);
+
+    // ========================================================================
+    // COG PIXEL COLOR FUNCTION
+    // ========================================================================
+    MaplibreCOGProtocol.setColorFunction(
+      rainfallCogUrl,
+      (pixel, color, metadata) => {
+        const rawValue = pixel[0];
+
+        if (rawValue === metadata.noData || !Number.isFinite(rawValue)) {
+          color.set([0,0,0,0]);
+          return;
+        }
+
+        const scale = Number.isFinite(metadata.scale) ? metadata.scale : 1;
+        const offset = Number.isFinite(metadata.offset) ? metadata.offset : 0;
+        const rainMm = rawValue * scale + offset;
+        const rainIn = rainMm / 25.4;
+
+        if (!Number.isFinite(rainIn) || rainIn < 0.001) {
+          color.set([0,0,0,0]);
+          return;
+        }
+
+        for (let i=0; i<rainSegments.length; i++) {
+          const segment = rainSegments[i];
+
+          if (rainIn >= segment.min && rainIn < segment.max) {
+            const t = clamp01(
+              (rainIn - segment.min) / (segment.max - segment.min)
+            );
+
+            const rgb = interpolateRgb(segment.rgb0, segment.rgb1, t);
+
+            // Make trace/light rain intentionally less visually dominant.
+            let alpha = 255;
+            if (rainIn < 0.25) {
+              const traceT = clamp01((rainIn - 0.001) / (0.25 - 0.001));
+              alpha = Math.round(lerp(115,255,traceT));
+            }
+
+            color.set([rgb[0], rgb[1], rgb[2], alpha]);
+            return;
+          }
+        }
+
+        if (rainIn >= 12.0) {
+          color.set([extremeRgb[0], extremeRgb[1], extremeRgb[2], 255]);
+          return;
+        }
+
+        color.set([0,0,0,0]);
+      }
+    );
 
     // ========================================================================
     // HORIZONTAL LEGEND
@@ -213,126 +301,97 @@
 
     // ========================================================================
     // MAP
-    //
-    // Local POC only:
-    //   style JSON:  /web/cfhydromet_basemap_light.json
-    //   basemap:     /pmt/labatt_basemap_test.pmtiles
-    //   radar tiles: /radar_tile/tiles/20260715/{z}/{x}/{y}.png
-    //
-    // This avoids the localhost -> cfhydromet.com CORS problem while we prove
-    // the raster-tile display and animation architecture.
     // ========================================================================
+    const map = new maplibregl.Map({
+      container:"map",
+      style:"https://cfhydromet.com/styles/cfhydromet_basemap_light.json",
+	  //style:"./cfhydromet_basemap_light.json",
+      center:[-99.43335,30.115],
+      zoom:6.7
+    });
 
-    async function startMap() {
-      const styleResponse = await fetch("./cfhydromet_basemap_light.json");
-
-      if (!styleResponse.ok) {
-        throw new Error(
-          `Could not load local style JSON: ${styleResponse.status} ${styleResponse.statusText}`
-        );
-      }
-
-      const localStyle = await styleResponse.json();
-
-      // Rewrite the POC PMTiles basemap source to the same localhost origin.
-      // This means you do NOT have to edit the style JSON just for this test.
-      const localPmtilesUrl =
-        `pmtiles://${window.location.origin}/pmt/labatt_basemap_test.pmtiles`;
-
-      Object.values(localStyle.sources || {}).forEach(source => {
-        if (
-          source &&
-          typeof source.url === "string" &&
-          source.url.startsWith("pmtiles://")
-        ) {
-          source.url = localPmtilesUrl;
-        }
-      });
-
-      const map = new maplibregl.Map({
-        container:"map",
-        style:localStyle,
-        center:[-99.43335,30.115],
-        zoom:6.7
-      });
-
-      function resizeMap() {
-        window.setTimeout(() => {
-          map.resize();
-        }, 100);
-      }
-
-      window.addEventListener("resize", resizeMap);
-      window.addEventListener("orientationchange", resizeMap);
-
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", resizeMap);
-      }
-
-      map.addControl(
-        new maplibregl.NavigationControl(),
-        "top-right"
-      );
-
-      map.addControl(
-        new maplibregl.ScaleControl({
-          maxWidth:120,
-          unit:"imperial"
-        }),
-        "bottom-left"
-      );
-
-      map.on("load", () => {
-        // --------------------------------------------------------------------
-        // JULY 15 PRE-COLORED XYZ RADAR TILES
-        // --------------------------------------------------------------------
-        map.addSource("texas-rainfall", {
-          type:"raster",
-          tiles:[
-            `${window.location.origin}/radar_tile/tiles/20260715/{z}/{x}/{y}.png`
-          ],
-          tileSize:256,
-          minzoom:4,
-          maxzoom:9
-        });
-
-        // Keep labels above rainfall, matching the earlier COG POC.
-        const firstSymbolLayer = map
-          .getStyle()
-          .layers
-          .find(layer => layer.type === "symbol");
-
-        const beforeLayerId = firstSymbolLayer
-          ? firstSymbolLayer.id
-          : undefined;
-
-        map.addLayer(
-          {
-            id:"texas-rainfall",
-            type:"raster",
-            source:"texas-rainfall",
-            paint:{
-              "raster-opacity":0.78,
-              "raster-resampling":"linear",
-              "raster-fade-duration":0
-            }
-          },
-          beforeLayerId
-        );
-
-        console.log(
-          "Local PMTiles basemap + July 15 XYZ rainfall tiles loaded."
-        );
-      });
-
-      map.on("error", e => {
-        console.error("MapLibre error:", e.error || e);
-      });
+    function resizeMap() {
+      window.setTimeout(() => {
+        map.resize();
+      }, 100);
     }
 
-    startMap().catch(error => {
-      console.error("POC startup error:", error);
+    window.addEventListener("resize", resizeMap);
+    window.addEventListener("orientationchange", resizeMap);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resizeMap);
+    }
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ maxWidth:120, unit:"imperial" }), "bottom-left");
+
+    map.on("load", () => {
+      map.addSource("texas-rainfall", {
+        type:"raster",
+        url:`cog://${rainfallCogUrl}`,
+        tileSize:256
+      });
+
+      const firstSymbolLayer = map.getStyle().layers.find(layer => layer.type === "symbol");
+      const beforeLayerId = firstSymbolLayer ? firstSymbolLayer.id : undefined;
+
+      map.addLayer(
+        {
+          id:"texas-rainfall",
+          type:"raster",
+          source:"texas-rainfall",
+          paint:{
+            "raster-opacity":0.78,
+            "raster-resampling":"linear",
+            "raster-fade-duration":0
+          }
+        },
+        beforeLayerId
+      );
+
+      map.addSource("bundy", {
+        type:"geojson",
+        data:"https://cfhydromet.com/config/web_map/bundy_outline.geojson"
+      });
+
+      map.addLayer({
+        id:"bundy-fill",
+        type:"fill",
+        source:"bundy",
+        paint:{ "fill-color":"#e69f00", "fill-opacity":0.18 }
+      });
+
+      map.addLayer({
+        id:"bundy-outline",
+        type:"line",
+        source:"bundy",
+        paint:{ "line-color":"#b36b00", "line-width":3 }
+      });
+
+      map.addSource("turtle-farm", {
+        type:"geojson",
+        data:"https://cfhydromet.com/config/web_map/turtle_farm_outline.geojson"
+      });
+
+      map.addLayer({
+        id:"turtle-farm-fill",
+        type:"fill",
+        source:"turtle-farm",
+        paint:{ "fill-color":"#2a9d8f", "fill-opacity":0.18 }
+      });
+
+      map.addLayer({
+        id:"turtle-farm-outline",
+        type:"line",
+        source:"turtle-farm",
+        paint:{ "line-color":"#1f6f66", "line-width":3 }
+      });
+
+      console.log("July 15 rainfall COG + piecewise-continuous legend + Labatt overlays added.");
     });
+
+    map.on("error", e => console.error("MapLibre error:", e.error || e));
   </script>
 </body>
 </html>
