@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+
+  <title>CFHydromet Movie Frame</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css"
+  />
+
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@4/dist/pmtiles.js"></script>
+
+  <!-- Direct COG reader for MapLibre -->
+  <script
+    src="https://unpkg.com/@geomatico/maplibre-cog-protocol@0.9.2/dist/index.js">
+  </script>
+
+  <style>
+
+    html,
+    body {
+      width:100%;
+      height:100%;
+      margin:0;
+      padding:0;
+      overflow:hidden;
+      background:#f3f1e8;
+      font-family:Arial,sans-serif;
+    }
+
+    #map {
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+    }
+
+    .frame-badge {
+      position:absolute;
+      top:20px;
+      left:20px;
+      z-index:10;
+
+      padding:10px 14px;
+
+      border-radius:8px;
+
+      background:rgba(255,255,255,0.94);
+
+      box-shadow:
+        0 1px 7px rgba(0,0,0,0.25);
+
+      font-size:16px;
+      line-height:1.35;
+
+      pointer-events:none;
+    }
+
+    .rain-legend {
+      position:absolute;
+
+      left:50%;
+      bottom:24px;
+
+      transform:translateX(-50%);
+
+      z-index:10;
+
+      width: 800px;
+
+      padding:
+        9px
+        12px
+        8px
+        12px;
+
+      border-radius:9px;
+
+      background:
+        rgba(15,15,15,0.88);
+
+      color:white;
+
+      box-shadow:
+        0 1px 8px rgba(0,0,0,0.35);
+
+      pointer-events:none;
+    }
+
+    .rain-legend-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      margin-bottom:5px;
+    }
+
+    .rain-legend-title {
+      font-size: 16px;
+      font-weight:700;
+    }
+
+    .rain-legend-note {
+      font-size: 13px;
+      opacity:0.72;
+    }
+
+    .legend-bar {
+      display:flex;
+      height: 17px;
+      overflow:hidden;
+
+      border-radius:4px;
+
+      border:
+        1px solid
+        rgba(255,255,255,0.45);
+    }
+
+    .legend-segment {
+      height:100%;
+    }
+
+    .legend-labels {
+      position:relative;
+      height: 22px;
+      margin-top: 4px;
+      font-size: 13px;
+    }
+
+    .legend-label {
+      position:absolute;
+      transform:translateX(-50%);
+      white-space:nowrap;
+    }
+
+    .legend-label.first {
+      transform:none;
+    }
+
+    .legend-label.last {
+      transform:translateX(-100%);
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <div id="map"></div>
+
+  <div class="frame-badge">
+  <strong>Stage IV Radar Precipitation</strong><br>
+  EAHCP Science Committee<br>
+  <span id="frame-date"></span>
+</div>
+
+  <div class="rain-legend">
+
+    <div class="rain-legend-header">
+      <div class="rain-legend-title">
+        Rainfall (in)
+      </div>
+
+      <div class="rain-legend-note">
+        7-day Stage IV
+      </div>
+    </div>
+
+    <div
+      id="legend-bar"
+      class="legend-bar">
+    </div>
+
+    <div
+      id="legend-labels"
+      class="legend-labels">
+    </div>
+
+  </div>
+
+
+<script>
+
+//
+// ============================================================
+// RANGE LABEL
+// ============================================================
+//
+
+const startDate = "20260711";
+const endDate   = "20260718";
+
+// Keep date defined because the frame-ready console message uses it later.
+const date = endDate;
+
+const endYyyy = endDate.substring(0,4);
+const endMm   = endDate.substring(4,6);
+const endDd   = endDate.substring(6,8);
+
+const displayEndDate =
+  new Date(
+    `${endYyyy}-${endMm}-${endDd}T12:00:00`
+  )
+  .toLocaleDateString(
+    "en-US",
+    {
+      month:"long",
+      day:"numeric",
+      year:"numeric"
+    }
+  );
+
+document.getElementById(
+  "frame-date"
+).textContent =
+  `31-day totals ending August 31, 2026 07:00`;
+//
+// ============================================================
+// MAPLIBRE PROTOCOLS
+// ============================================================
+//
+
+const pmtilesProtocol =
+  new pmtiles.Protocol();
+
+maplibregl.addProtocol(
+  "pmtiles",
+  pmtilesProtocol.tile
+);
+
+
+// COG protocol
+maplibregl.addProtocol(
+  "cog",
+  MaplibreCOGProtocol.cogProtocol
+);
+
+
+//
+// ============================================================
+// RAINFALL COLOR PALETTE
+// ============================================================
+//
+const rainSegments = [
+
+  {
+    min:0.001,
+    max:0.25,
+    start:"#d7dee9",
+    end:"#173f9d",
+    width:1.55
+  },
+
+  {
+    min:0.25,
+    max:1.50,
+    start:"#39ef63",
+    end:"#006719",
+    width:2.10
+  },
+
+  {
+    min:1.50,
+    max:3.00,
+    start:"#fff23b",
+    end:"#ff8b00",
+    width:1.55
+  },
+
+  {
+    min:3.00,
+    max:5.00,
+    start:"#ff5738",
+    end:"#c90e18",
+    width:1.30
+  },
+
+  {
+    min:5.00,
+    max:8.00,
+    start:"#c68cff",
+    end:"#64208f",
+    width:1.25
+  },
+
+  {
+    min:8.00,
+    max:12.00,
+    start:"#ff5cc8",
+    end:"#b0006f",
+    width:1.10
+  }
+
+];
+
+const extremeColor = "#5a003f";
+
+
+
+
+//
+// ============================================================
+// COLOR HELPERS
+// ============================================================
+//
+
+function hexToRgb(hex) {
+
+  const value =
+    hex.replace("#","");
+
+  return [
+    parseInt(
+      value.substring(0,2),
+      16
+    ),
+
+    parseInt(
+      value.substring(2,4),
+      16
+    ),
+
+    parseInt(
+      value.substring(4,6),
+      16
+    )
+  ];
+}
+
+
+function interpolateColor(
+  startHex,
+  endHex,
+  t
+) {
+
+  const a =
+    hexToRgb(startHex);
+
+  const b =
+    hexToRgb(endHex);
+
+
+  return [
+
+    Math.round(
+      a[0] +
+      (b[0] - a[0]) * t
+    ),
+
+    Math.round(
+      a[1] +
+      (b[1] - a[1]) * t
+    ),
+
+    Math.round(
+      a[2] +
+      (b[2] - a[2]) * t
+    )
+
+  ];
+}
+
+
+//
+// ============================================================
+// LEGEND
+// ============================================================
+//
+
+const legendBar =
+  document.getElementById(
+    "legend-bar"
+  );
+
+const legendLabels =
+  document.getElementById(
+    "legend-labels"
+  );
+
+
+const totalLegendWeight =
+  rainSegments.reduce(
+    (sum,segment) =>
+      sum + segment.width,
+    0
+  );
+
+
+rainSegments.forEach(
+  segment => {
+
+    const div =
+      document.createElement(
+        "div"
+      );
+
+    div.className =
+      "legend-segment";
+
+    div.style.flex =
+      `${segment.width} 1 0`;
+
+    div.style.background =
+      `linear-gradient(
+        to right,
+        ${segment.start},
+        ${segment.end}
+      )`;
+
+    legendBar.appendChild(
+      div
+    );
+
+  }
+);
+
+
+const extremeWeight =
+  0.55;
+
+const extremeDiv =
+  document.createElement(
+    "div"
+  );
+
+extremeDiv.className =
+  "legend-segment";
+
+extremeDiv.style.flex =
+  `${extremeWeight} 1 0`;
+
+extremeDiv.style.background =
+  extremeColor;
+
+legendBar.appendChild(
+  extremeDiv
+);
+
+
+const legendStops = [
+
+  {
+    value:"0",
+    weight:0
+  },
+
+  {
+    value:"0.25",
+    weight:
+      rainSegments[0].width
+  },
+
+  {
+    value:"4",
+    weight:
+      rainSegments[0].width +
+      rainSegments[1].width
+  },
+
+  {
+    value:"8",
+    weight:
+      rainSegments[0].width +
+      rainSegments[1].width +
+      rainSegments[2].width
+  },
+
+  {
+    value:"12",
+    weight:
+      rainSegments[0].width +
+      rainSegments[1].width +
+      rainSegments[2].width +
+      rainSegments[3].width
+  },
+
+  {
+    value:"16",
+    weight:
+      rainSegments[0].width +
+      rainSegments[1].width +
+      rainSegments[2].width +
+      rainSegments[3].width +
+      rainSegments[4].width
+  },
+
+  {
+    value:"20+",
+    weight:
+      totalLegendWeight +
+      extremeWeight
+  }
+
+];
+
+
+const totalWeight =
+  totalLegendWeight +
+  extremeWeight;
+
+
+legendStops.forEach(
+  (stop,index) => {
+
+    const label =
+      document.createElement(
+        "span"
+      );
+
+    label.className =
+      "legend-label";
+
+    if (
+      index === 0
+    ) {
+
+      label.classList.add(
+        "first"
+      );
+
+    }
+
+    if (
+      index ===
+      legendStops.length - 1
+    ) {
+
+      label.classList.add(
+        "last"
+      );
+
+    }
+
+    label.textContent =
+      stop.value;
+
+    label.style.left =
+      `${
+        100 *
+        stop.weight /
+        totalWeight
+      }%`;
+
+    legendLabels.appendChild(
+      label
+    );
+
+  }
+);
+
+
+//
+// ============================================================
+// MAP
+// ============================================================
+//
+
+async function startMap() {
+
+  //
+  // Read your existing style JSON.
+  //
+
+  const styleResponse =
+    await fetch(
+      "./cfhydromet_basemap_light.json"
+    );
+
+
+  if (
+    !styleResponse.ok
+  ) {
+
+    throw new Error(
+      `Could not load style JSON: ${
+        styleResponse.status
+      }`
+    );
+
+  }
+
+
+  const localStyle =
+    await styleResponse.json();
+
+
+  //
+  // Because our server root is now:
+  //
+  // C:\stg4\MapLibrePOC
+  //
+  // local PMTiles is:
+  //
+  // /poc/pmt/...
+  //
+
+  const localPmtilesUrl =
+    `pmtiles://${
+      window.location.origin
+    }/poc/pmt/labatt_basemap_test.pmtiles`;
+
+
+  Object.values(
+    localStyle.sources || {}
+  )
+  .forEach(
+    source => {
+
+      if (
+        source &&
+        typeof source.url ===
+          "string" &&
+        source.url.startsWith(
+          "pmtiles://"
+        )
+      ) {
+
+        source.url =
+          localPmtilesUrl;
+
+      }
+
+    }
+  );
+
+
+  //
+  // ==========================================================
+  // COG URL
+  // ==========================================================
+  //
+
+  const cogUrl =
+    `${
+      window.location.origin
+    }/texas_COG_range/output/cog/stage4_range_20260802_to_20260831_15x_r03.tif`;
+
+
+  console.log(
+    "COG:",
+    cogUrl
+  );
+
+
+  //
+  // ==========================================================
+  // COLOR THE SINGLE-BAND COG
+  //
+  // TIFF values are millimeters.
+  // Convert to inches here.
+  // ==========================================================
+  //
+
+  MaplibreCOGProtocol.setColorFunction(
+
+    cogUrl,
+
+    (
+      pixel,
+      color,
+      metadata
+    ) => {
+
+      const rainMm =
+        pixel[0];
+
+
+      if (
+        !Number.isFinite(
+          rainMm
+        ) ||
+        rainMm < 0 ||
+        rainMm === metadata.noData
+      ) {
+
+        color.set(
+          [0,0,0,0]
+        );
+
+        return;
+
+      }
+
+
+      const rainIn =
+        rainMm / 25.4;
+
+
+      //
+      // Essentially dry:
+      // transparent.
+      //
+
+      if (
+        rainIn < 0.001
+      ) {
+
+        color.set(
+          [0,0,0,0]
+        );
+
+        return;
+
+      }
+
+
+      //
+      // Extreme.
+      //
+
+      if (
+        rainIn >= 12
+      ) {
+
+        const rgb =
+          hexToRgb(
+            extremeColor
+          );
+
+        color.set(
+          [
+            rgb[0],
+            rgb[1],
+            rgb[2],
+            255
+          ]
+        );
+
+        return;
+
+      }
+
+
+      //
+      // Find segment.
+      //
+
+      for (
+        const segment
+        of rainSegments
+      ) {
+
+        if (
+          rainIn >= segment.min &&
+          rainIn < segment.max
+        ) {
+
+          const t =
+            (
+              rainIn -
+              segment.min
+            ) /
+            (
+              segment.max -
+              segment.min
+            );
+
+
+          const rgb =
+            interpolateColor(
+              segment.start,
+              segment.end,
+              t
+            );
+
+
+          color.set(
+            [
+              rgb[0],
+              rgb[1],
+              rgb[2],
+              255
+            ]
+          );
+
+          return;
+
+        }
+
+      }
+
+
+      color.set(
+        [0,0,0,0]
+      );
+
+    }
+
+  );
+
+
+  //
+  // ==========================================================
+  // CREATE MAP
+  // ==========================================================
+  //
+
+  // ==========================================================
+// FIXED MOVIE EXTENT
+// ==========================================================
+//
+// southwest corner:
+//   longitude, latitude
+//
+// northeast corner:
+//   longitude, latitude
+//
+// Tune these four numbers until the movie framing is exactly
+// what you want. Every screenshot will then use the same view.
+//
+
+const MOVIE_BOUNDS = [
+  [-100.55, 28.15],   // southwest
+  [ -96.3, 30.8]    // northeast
+];
+
+const map =
+  new maplibregl.Map({
+
+    container:"map",
+
+    style:
+      localStyle,
+
+    bounds:
+      MOVIE_BOUNDS,
+
+    fitBoundsOptions:{
+      padding:0
+    },
+
+    attributionControl:false
+
+  });
+
+
+  map.on(
+    "load",
+    () => {
+
+      //
+      // Add COG.
+      //
+
+      map.addSource(
+        "texas-rainfall",
+        {
+
+          type:"raster",
+
+          url:
+            `cog://${cogUrl}`,
+
+          tileSize:256
+
+        }
+      );
+
+
+      //
+      // Layer order for the movie:
+      //   basemap
+      //   rainfall COG
+      //   aquifer-outside-mask
+      //   contrib/recharge outline
+      //   labels
+      //
+      // Insert rainfall immediately BELOW aquifer-outside-mask.
+      // The mask therefore subdues both the basemap and rainfall outside
+      // the recharge/contributing-zone hole, while rainfall inside the hole
+      // remains fully visible.
+      //
+
+      const beforeLayerId =
+        map.getLayer("aquifer-outside-mask")
+        ? "aquifer-outside-mask"
+        : undefined;
+
+
+      map.addLayer(
+
+        {
+
+          id:
+            "texas-rainfall",
+
+          type:
+            "raster",
+
+          source:
+            "texas-rainfall",
+
+          paint:{
+
+            "raster-opacity":
+              0.78,
+
+            "raster-resampling":
+              "linear",
+
+            "raster-fade-duration":
+              0
+
+          }
+
+        },
+
+        beforeLayerId
+
+      );
+
+
+      //
+      // ======================================================
+      // HEADLESS SCREENSHOT SIGNAL
+      //
+      // Do NOT screenshot until MapLibre says all requested
+      // tiles/resources are finished.
+      // ======================================================
+      //
+
+      map.once(
+        "idle",
+        () => {
+
+          //
+          // Two animation frames give
+          // WebGL one last chance
+          // to commit the canvas.
+          //
+
+          requestAnimationFrame(
+            () => {
+
+              requestAnimationFrame(
+                () => {
+
+                  window.__MOVIE_FRAME_READY__ =
+                    true;
+
+                  console.log(
+                    "MOVIE FRAME READY:",
+                    date
+                  );
+
+                }
+              );
+
+            }
+          );
+
+        }
+      );
+
+    }
+  );
+
+
+  map.on(
+    "error",
+    event => {
+
+      console.error(
+        "MapLibre error:",
+        event.error ||
+        event
+      );
+
+    }
+  );
+
+}
+
+
+startMap()
+.catch(
+  error => {
+
+    console.error(
+      "Movie frame startup error:",
+      error
+    );
+
+  }
+);
+
+</script>
+
+</body>
+</html>

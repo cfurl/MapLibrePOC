@@ -6,7 +6,15 @@
     "protomaps": {
       "type": "vector",
       "url": "pmtiles://https://cfhydromet.com/basemaps/labatt_poc.pmtiles",
-      "attribution": "\u00a9 OpenStreetMap contributors"
+      "attribution": "© OpenStreetMap contributors"
+    },
+    "contrib-rchg": {
+      "type": "geojson",
+      "data": "./data/contrib_rchg.geojson"
+    },
+    "box-hole": {
+      "type": "geojson",
+      "data": "./data/boxx_w_hole.geojson"
     }
   },
   "layers": [
@@ -641,6 +649,25 @@
           14,
           4.8
         ]
+      }
+    },
+    {
+      "id": "aquifer-outside-mask",
+      "type": "fill",
+      "source": "box-hole",
+      "paint": {
+        "fill-color": "#bfbfbf",
+        "fill-opacity": 0.60
+      }
+    },
+    {
+      "id": "contrib-rchg-outline",
+      "type": "line",
+      "source": "contrib-rchg",
+      "paint": {
+        "line-color": "#000000",
+        "line-width": 2.2,
+        "line-opacity": 0.95
       }
     },
     {

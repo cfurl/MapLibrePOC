@@ -38,7 +38,7 @@ suppressPackageStartupMessages({
 # DATE
 # --------------------------------------------------------------------------
 # Change ONE value here to build another daily COG.
-MAP_DATE <- as.Date("2026-07-14")
+MAP_DATE <- as.Date("2026-07-18")
 
 YYYY <- format(MAP_DATE, "%Y")
 MM   <- format(MAP_DATE, "%m")
