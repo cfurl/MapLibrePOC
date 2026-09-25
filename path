@@ -1,0 +1,38 @@
+01_parquet_to_cog.R
+        ↓
+02_cog_to_rgba.R
+        ↓
+03_rgba_to_xyz_tiles
+        ↓
+04_MapLibre display
+
+later: 
+05_XYZ → raster PMTiles
+06_animation manifest
+07_A/B animation
+
+C:\stg4\MapLibrePOC\poc\radar_tile\
+│
+├── source\
+│   ├── texas_20260716.parquet
+│   └── texas_hrap_cells.gpkg
+│
+├── cog\
+│   └── 20260716\
+│       └── stage4_daily.tif
+│
+├── colored\
+│   └── 20260716\
+│       └── stage4_daily_rgba.tif
+│
+├── tiles\
+│   └── 20260716\
+│       ├── 4\
+│       ├── 5\
+│       ├── ...
+│       └── 9\
+│
+└── scripts\
+    ├── 01_parquet_to_cog.R
+    ├── 02_cog_to_rgba.R
+    └── 03_rgba_to_tiles.bat

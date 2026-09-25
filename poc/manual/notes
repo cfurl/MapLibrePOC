@@ -1,0 +1,97 @@
+Yep. Here’s the notes version I’d save.
+
+Manual XYZ rainfall POC — single-frame workflow proven
+
+We established a clean manual workspace:
+
+C:\stg4\MapLibrePOC\poc\manual\
+  source\
+  cog\
+  colored\
+  tiles\
+  scripts\
+
+For the test date 20260716, the complete chain now works:
+
+S3 Texas daily parquet
+        ↓
+01_parquet_to_cog.R
+        ↓
+manual/cog/20260716/stage4_daily.tif
+        ↓
+02_cog_to_rgba.R
+        ↓
+manual/colored/20260716/stage4_daily_rgba.tif
+        ↓
+03_rgba_to_xyz_tiles.bat
+        ↓
+manual/tiles/20260716/{z}/{x}/{y}.png
+        ↓
+MapLibre local web display
+
+01_parquet_to_cog.R uses the static local Texas HRAP geometry at:
+
+manual/source/texas_hrap_cells.gpkg
+
+and downloads the date-specific Texas parquet from:
+
+s3://stg4-24hr-aws-pipeline/
+CONUS_subset/production_areas/texas_mrb/
+precip/precip_parquet/
+year=YYYY/month=MM/day=DD/part-0.parquet
+
+The COG is the canonical continuous rainfall display surface. Current smoothing test is:
+
+upsample = 15
+Gaussian radius = 3 cells
+
+02_cog_to_rgba.R converts rainfall values into the display colors before tiling. Therefore MapLibre does not perform rainfall colorization for the XYZ version. The PNG tiles already contain RGB + alpha.
+
+The current palette remains:
+
+<0.001"       transparent
+0.001–0.25"   light blue → dark blue
+0.25–1.5"     green → dark green
+1.5–3"        yellow → orange
+3–5"          light red → dark red
+5–8"          light purple → dark purple
+8–12"         hot pink → deep magenta
+12"+          very dark purple
+
+03_rgba_to_xyz_tiles.bat successfully creates an XYZ raster tile pyramid. Current test:
+
+min tile zoom = 4
+max tile zoom = 9
+tile size     = 256 × 256
+
+The current dev computer uses:
+
+QGIS 3.40.14
+GDAL 3.12.1
+
+The work computer has a different QGIS/GDAL setup. This machine-specific GDAL/QGIS configuration is temporary; Docker/ECS should eliminate almost all of it.
+
+The MapLibre test successfully serves the XYZ pyramid. It dynamically requests the appropriate tiles as the user pans and zooms; this is not one large raster image.
+
+Important distinction:
+
+Map zoom != necessarily XYZ source zoom
+
+With MapLibre's 256-pixel raster source behavior, source tile zoom can be offset from map camera zoom. For purposes of this POC, the important conclusion is simply that the pyramid is working. We can later instrument exactly which source zoom is being used.
+
+The debug map now displays:
+
+Map zoom
+Map center longitude/latitude
+Radar tile range z4-z9
+
+This will be useful later for deciding:
+
+how deep the production tile pyramid needs to go;
+where overzooming becomes visually unacceptable;
+appropriate minZoom / maxZoom;
+geographic maxBounds so users cannot pan arbitrarily far away.
+
+Current visual result is successful. Tile boundaries are not visually obvious, labels/roads remain above rainfall, and the smoothed field behaves correctly while zooming.
+
+Status: one complete date is proven end-to-end.
