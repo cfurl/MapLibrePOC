@@ -3,3 +3,35 @@
 .RData
 .Ruserdata
 .Renviron
+# Generated raster/data products
+*.tif
+*.tiff
+*.png
+*.parquet
+
+# Future tile packaging / large raster inputs
+*.pmtiles
+*.grb
+*.grb2
+
+# Generated manual POC products
+poc/manual/cog/
+poc/manual/colored/
+poc/manual/tiles/
+
+# Movie/render output
+movie_frames/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Windows junk
+Thumbs.db
+Desktop.ini
+
+# macOS junk, harmless even on Windows
+.DS_Store
