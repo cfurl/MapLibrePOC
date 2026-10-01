@@ -1,0 +1,22 @@
+{
+  "product": "stage4_daily",
+  "frame_interval_ms": 1000,
+  "frames": [
+    {
+      "date": "20260713",
+      "label": "July 13, 2026"
+    },
+    {
+      "date": "20260714",
+      "label": "July 14, 2026"
+    },
+    {
+      "date": "20260715",
+      "label": "July 15, 2026"
+    },
+    {
+      "date": "20260716",
+      "label": "July 16, 2026"
+    }
+  ]
+}

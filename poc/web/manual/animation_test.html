@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CFHydromet A/B Animation POC</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" crossorigin="anonymous" />
+<script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/pmtiles@4/dist/pmtiles.js"></script>
+<style>
+html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:#f3f1e8;font-family:Arial,sans-serif}body{position:fixed;inset:0}#map{position:fixed;inset:0;width:100vw;height:100dvh;min-height:100vh}.panel{position:absolute;z-index:10;background:rgba(255,255,255,.94);box-shadow:0 1px 7px rgba(0,0,0,.25);border-radius:9px}.debug{top:12px;left:12px;padding:9px 11px;font-size:12px;line-height:1.45;pointer-events:none;min-width:220px}.controls{top:12px;left:50%;transform:translateX(-50%);padding:9px 10px;min-width:340px;text-align:center}.frame-label{font-size:15px;font-weight:700;margin-bottom:7px}.button-row{display:flex;justify-content:center;gap:6px}button{border:1px solid #999;border-radius:6px;background:white;padding:6px 10px;font-size:12px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.status{margin-top:6px;font-size:10px;color:#555;min-height:13px}.legend{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:10;width:min(620px,calc(100vw - 34px));padding:9px 12px 8px;border-radius:9px;background:rgba(15,15,15,.88);box-shadow:0 1px 8px rgba(0,0,0,.35);color:#fff;pointer-events:none}.legend-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}.legend-title{font-size:12px;font-weight:700}.legend-note{font-size:10px;opacity:.72}.legend-bar{display:flex;height:13px;overflow:hidden;border-radius:4px;border:1px solid rgba(255,255,255,.45)}.seg{height:100%}.labels{position:relative;height:17px;margin-top:3px;font-size:9px}.lab{position:absolute;transform:translateX(-50%);white-space:nowrap}.lab.first{transform:none}.lab.last{transform:translateX(-100%)}
+@media(max-width:700px){.debug{font-size:10px;max-width:42vw;min-width:0}.controls{top:auto;bottom:80px;width:calc(100vw - 28px);min-width:0;box-sizing:border-box}.legend{bottom:14px;width:calc(100vw - 24px)}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel debug"><strong>A/B Animation POC</strong><br>Map zoom: <span id="zoom">--</span><br>Center: <span id="center">--</span><br>Visible layer: <span id="slot">--</span><br>Current: <span id="current">--</span><br>Preloaded: <span id="preloaded">--</span><br>Radar tiles: z4-z9</div>
+<div class="panel controls"><div id="frame-label" class="frame-label">Loading frames...</div><div class="button-row"><button id="prev">Previous</button><button id="play">Play</button><button id="next">Next</button></div><div id="status" class="status">Initializing...</div></div>
+<div class="legend"><div class="legend-head"><div class="legend-title">Rainfall (in)</div><div class="legend-note">24-hour Stage IV</div></div><div id="legend-bar" class="legend-bar"></div><div id="legend-labels" class="labels"></div></div>
+<script>
+const MANIFEST_URL='./radar_frames.json';
+const TILE_ROOT='../../manual/tiles';
+const STYLE_URL='../cfhydromet_basemap_light.json';
+const BASEMAP_CANDIDATES=['../../pmt/labatt_basemap_test.pmtiles','../../pmt/labatt_poc.pmtiles'];
+const MIN_Z=4,MAX_Z=9,RAIN_OPACITY=.78,PRELOAD_TIMEOUT=15000;
+const BOUNDS=[-106.69,25.80,-93.46,36.54];
+let map,frames=[],frameInterval=1000,currentIndex=0,active='a',preloadedIndex=null,playing=false,busy=false,timer=null;
+const src={a:'rain-source-a',b:'rain-source-b'},lyr={a:'rain-layer-a',b:'rain-layer-b'};
+const $=id=>document.getElementById(id); const status=t=>$('status').textContent=t;
+const other=s=>s==='a'?'b':'a'; const next=i=>(i+1)%frames.length; const prev=i=>(i-1+frames.length)%frames.length;
+function tile(date){return `${TILE_ROOT}/${date}/{z}/{x}/{y}.png`}
+function readout(){if(!frames.length)return;$('frame-label').textContent=frames[currentIndex].label;$('slot').textContent=active.toUpperCase();$('current').textContent=frames[currentIndex].date;$('preloaded').textContent=preloadedIndex===null?'--':frames[preloadedIndex].date}
+function mapReadout(){if(!map)return;const z=map.getZoom(),c=map.getCenter();$('zoom').textContent=z.toFixed(2)+(z>MAX_Z?' (overzooming z9)':'');$('center').textContent=`${c.lng.toFixed(4)}, ${c.lat.toFixed(4)}`}
+function opacity(slot,v){map.setPaintProperty(lyr[slot],'raster-opacity',v)}
+function disable(v){$('prev').disabled=v;$('next').disabled=v}
+async function existing(urls){for(const u of urls){try{const r=await fetch(u,{method:'HEAD',cache:'no-store'});if(r.ok)return u}catch(e){}}throw new Error('No local PMTiles basemap found')}
+async function loadStyle(pm){const r=await fetch(STYLE_URL,{cache:'no-store'});if(!r.ok)throw new Error(`Could not load ${STYLE_URL}`);const s=await r.json();const abs=`pmtiles://${new URL(pm,location.href).href}`;Object.values(s.sources||{}).forEach(x=>{if(x&&typeof x.url==='string'&&x.url.startsWith('pmtiles://'))x.url=abs});return s}
+async function loadManifest(){const r=await fetch(MANIFEST_URL,{cache:'no-store'});if(!r.ok)throw new Error('Could not load radar_frames.json');const m=await r.json();frames=m.frames||[];if(frames.length<2)throw new Error('Need at least two frames');if(Number.isFinite(m.frame_interval_ms)&&m.frame_interval_ms>0)frameInterval=m.frame_interval_ms}
+function waitSource(id,timeout=PRELOAD_TIMEOUT){return new Promise((resolve,reject)=>{const t0=performance.now();(function poll(){if(!map.getSource(id))return reject(new Error(`Missing source ${id}`));if(map.isSourceLoaded(id))return resolve();if(performance.now()-t0>timeout)return reject(new Error(`Timed out waiting for ${id}`));setTimeout(poll,50)})()})}
+async function loadInto(slot,index){const s=map.getSource(src[slot]);if(!s||typeof s.setTiles!=='function')throw new Error(`${src[slot]} does not support setTiles()`);s.setTiles([tile(frames[index].date)]);await waitSource(src[slot])}
+async function preload(index){const hidden=other(active);status(`Preloading ${frames[index].label} into ${hidden.toUpperCase()}...`);await loadInto(hidden,index);preloadedIndex=index;readout();status(`${frames[index].label} ready in ${hidden.toUpperCase()}.`)}
+async function show(index){if(busy||index===currentIndex)return;busy=true;disable(true);const incoming=other(active),outgoing=active;try{if(preloadedIndex!==index)await preload(index);status(`Swapping to ${frames[index].label}...`);opacity(outgoing,0);opacity(incoming,RAIN_OPACITY);active=incoming;currentIndex=index;preloadedIndex=null;readout();const n=next(currentIndex);try{await preload(n)}catch(e){console.warn(e);preloadedIndex=null;readout();status('Current frame shown; next preload failed.')}}catch(e){console.error(e);status(`Frame change failed: ${e.message}`)}finally{busy=false;disable(false)}}
+function stop(){playing=false;$('play').textContent='Play';if(timer!==null){clearTimeout(timer);timer=null}}
+async function tick(){if(!playing)return;await show(next(currentIndex));if(playing)timer=setTimeout(tick,frameInterval)}
+function start(){if(playing)return;playing=true;$('play').textContent='Pause';timer=setTimeout(tick,frameInterval)}
+function toggle(){playing?stop():start()}
+function legend(){const segs=[['#d7dee9','#173f9d',1.55],['#39ef63','#006719',2.10],['#fff23b','#ff8b00',1.55],['#ff5738','#c90e18',1.30],['#c68cff','#64208f',1.25],['#ff5cc8','#b0006f',1.10]],bar=$('legend-bar'),labs=$('legend-labels');segs.forEach(s=>{const d=document.createElement('div');d.className='seg';d.style.flex=`${s[2]} 1 0`;d.style.background=`linear-gradient(to right,${s[0]},${s[1]})`;bar.appendChild(d)});const ex=document.createElement('div');ex.className='seg';ex.style.flex='.55 1 0';ex.style.background='#5a003f';bar.appendChild(ex);const weights=[0,1.55,3.65,5.20,6.50,7.75,9.40],names=['0','0.25','1.5','3','5','8','12+'];weights.forEach((w,i)=>{const l=document.createElement('span');l.className='lab'+(i===0?' first':'')+(i===names.length-1?' last':'');l.textContent=names[i];l.style.left=`${100*w/9.40}%`;labs.appendChild(l)})}
+async function init(){legend();await loadManifest();const pm=await existing(BASEMAP_CANDIDATES),style=await loadStyle(pm);map=new maplibregl.Map({container:'map',style,center:[-99.43335,30.115],zoom:6.7});map.addControl(new maplibregl.NavigationControl(),'top-right');map.addControl(new maplibregl.ScaleControl({maxWidth:120,unit:'imperial'}),'bottom-left');map.on('zoom',mapReadout);map.on('move',mapReadout);map.on('error',e=>console.error('MapLibre error:',e.error||e));await new Promise(r=>map.once('load',r));const sym=map.getStyle().layers.find(l=>l.type==='symbol'),before=sym?sym.id:undefined;
+map.addSource(src.a,{type:'raster',tiles:[tile(frames[0].date)],tileSize:256,minzoom:MIN_Z,maxzoom:MAX_Z,bounds:BOUNDS});map.addLayer({id:lyr.a,type:'raster',source:src.a,paint:{'raster-opacity':RAIN_OPACITY,'raster-resampling':'linear','raster-fade-duration':0}},before);
+map.addSource(src.b,{type:'raster',tiles:[tile(frames[1].date)],tileSize:256,minzoom:MIN_Z,maxzoom:MAX_Z,bounds:BOUNDS});map.addLayer({id:lyr.b,type:'raster',source:src.b,paint:{'raster-opacity':0,'raster-resampling':'linear','raster-fade-duration':0}},before);
+currentIndex=0;active='a';preloadedIndex=1;mapReadout();readout();status(`Loading ${frames[1].label} into B...`);try{await waitSource(src.b);status(`${frames[1].label} ready. Use Next or Play.`)}catch(e){console.warn(e);preloadedIndex=null;readout();status('Initial frame ready; B will retry on demand.')}
+$('prev').onclick=async()=>{stop();await show(prev(currentIndex))};$('next').onclick=async()=>{stop();await show(next(currentIndex))};$('play').onclick=toggle;
+}
+init().catch(e=>{console.error(e);$('frame-label').textContent='Startup error';status(e.message);['prev','next','play'].forEach(id=>$(id).disabled=true)});
+</script>
+</body>
+</html>

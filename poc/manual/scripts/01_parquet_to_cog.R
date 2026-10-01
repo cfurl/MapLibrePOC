@@ -38,7 +38,7 @@ suppressPackageStartupMessages({
 # ==============================================================================
 
 # Change ONE value here to build another daily COG.
-MAP_DATE <- as.Date("2026-07-16")
+MAP_DATE <- as.Date("2026-07-13")
 
 # Manual POC root. Later this can map to Docker work/tmp paths.
 ROOT_DIR <- "C:/stg4/MapLibrePOC/poc/manual"

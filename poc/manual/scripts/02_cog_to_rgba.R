@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 # CONFIG
 # ==============================================================================
 
-MAP_DATE <- as.Date("2026-07-16")
+MAP_DATE <- as.Date("2026-07-13")
 
 ROOT_DIR <- "C:/stg4/MapLibrePOC/poc/manual"
 
