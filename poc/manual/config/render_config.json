@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "aws": {
+    "region": "us-east-2"
+  },
+  "storage": {
+    "data_bucket": "stg4-24hr-large-area-data",
+    "render_bucket": "stg4-24hr-large-area-render",
+    "numerical_success_key": "CONUS_subset/production_areas/{area_id}/precip/ytd/signals/year={YYYY}/month={MM}/day={DD}/_SUCCESS",
+    "numerical_cycle_success_key": "CONUS_subset/production_areas/{area_id}/precip/ytd/signals/cycle/cycle={cycle}/_SUCCESS",
+    "daily_parquet_key": "CONUS_subset/production_areas/{area_id}/precip/daily/precip_parquet/year={YYYY}/month={MM}/day={DD}/part-0.parquet",
+    "cells_key": "CONUS_subset/config/aoi/{area_id}/assets/cells.gpkg",
+    "cog_key": "CONUS_subset/production_areas/{area_id}/precip/daily/cog/year={YYYY}/month={MM}/day={DD}/stage4_daily.tif"
+  },
+  "defaults": {
+    "smoothing": {
+      "upsample_factor": 15,
+      "radius_cells": 3,
+      "sigma_cells": null
+    },
+    "run": {
+      "require_numerical_success": true,
+      "overwrite_inputs": true,
+      "overwrite_cog": true,
+      "upload_cog": true
+    },
+    "qa": {
+      "require_full_cell_match": true
+    },
+    "cog": {
+      "cache_control": "public,max-age=31536000,immutable"
+    }
+  },
+  "areas": {
+    "texas": {
+      "enabled": true
+    },
+    "wgrfc": {
+      "enabled": true,
+      "smoothing": {
+        "upsample_factor": 15,
+        "radius_cells": 3,
+        "sigma_cells": null
+      }
+    }
+  }
+}
