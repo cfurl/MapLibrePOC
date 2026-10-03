@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "aws": {
     "region": "us-east-2"
   },
@@ -10,7 +10,8 @@
     "numerical_cycle_success_key": "CONUS_subset/production_areas/{area_id}/precip/ytd/signals/cycle/cycle={cycle}/_SUCCESS",
     "daily_parquet_key": "CONUS_subset/production_areas/{area_id}/precip/daily/precip_parquet/year={YYYY}/month={MM}/day={DD}/part-0.parquet",
     "cells_key": "CONUS_subset/config/aoi/{area_id}/assets/cells.gpkg",
-    "cog_key": "CONUS_subset/production_areas/{area_id}/precip/daily/cog/year={YYYY}/month={MM}/day={DD}/stage4_daily.tif"
+    "cog_key": "CONUS_subset/production_areas/{area_id}/precip/daily/cog/year={YYYY}/month={MM}/day={DD}/stage4_daily.tif",
+    "pmtiles_key": "CONUS_subset/production_areas/{area_id}/precip/daily/pmtiles/year={YYYY}/month={MM}/day={DD}/stage4_daily.pmtiles"
   },
   "defaults": {
     "smoothing": {
@@ -18,24 +19,86 @@
       "radius_cells": 3,
       "sigma_cells": null
     },
+    "display": {
+      "units": "inches",
+      "trace_threshold_in": 0.001,
+      "trace_alpha_min": 115,
+      "trace_alpha_max": 255,
+      "segments": [
+        {
+          "min_in": 0.001,
+          "max_in": 0.25,
+          "start": "#d7dee9",
+          "end": "#173f9d"
+        },
+        {
+          "min_in": 0.25,
+          "max_in": 1.5,
+          "start": "#39ef63",
+          "end": "#006719"
+        },
+        {
+          "min_in": 1.5,
+          "max_in": 3.0,
+          "start": "#fff23b",
+          "end": "#ff8b00"
+        },
+        {
+          "min_in": 3.0,
+          "max_in": 5.0,
+          "start": "#ff5738",
+          "end": "#c90e18"
+        },
+        {
+          "min_in": 5.0,
+          "max_in": 8.0,
+          "start": "#c68cff",
+          "end": "#64208f"
+        },
+        {
+          "min_in": 8.0,
+          "max_in": 12.0,
+          "start": "#ff5cc8",
+          "end": "#b0006f"
+        }
+      ],
+      "extreme_min_in": 12.0,
+      "extreme_color": "#5a003f"
+    },
+    "tiles": {
+      "min_zoom": 4,
+      "max_zoom": 9,
+      "resampling": "bilinear",
+      "tile_size": 256,
+      "webviewer": "none",
+      "scheme": "xyz"
+    },
+    "pmtiles": {
+      "tile_type": "png"
+    },
     "run": {
       "require_numerical_success": true,
       "overwrite_inputs": true,
       "overwrite_cog": true,
-      "upload_cog": true
+      "upload_cog": true,
+      "overwrite_pmtiles": true,
+      "upload_pmtiles": true
     },
     "qa": {
       "require_full_cell_match": true
     },
     "cog": {
       "cache_control": "public,max-age=31536000,immutable"
+    },
+    "delivery": {
+      "cache_control_pmtiles": "public,max-age=31536000,immutable"
     }
   },
   "areas": {
     "texas": {
       "enabled": true
     },
-    "wgrfc": {
+    "serfc": {
       "enabled": true,
       "smoothing": {
         "upsample_factor": 15,

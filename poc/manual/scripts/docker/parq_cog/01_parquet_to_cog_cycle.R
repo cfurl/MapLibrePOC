@@ -27,14 +27,26 @@
 #
 # Stage responsibility:
 #   numerical success -> daily parquet + cells.gpkg -> smoothed COG -> upload COG
+#   -> COG metadata -> COG _SUCCESS markers
+#
+# Footprint invariant:
+#   cells.gpkg defines a fixed area footprint. Missing rain_mm values remain
+#   NoData inside that footprint and must never change raster extent/dimensions.
+#
+# This stage DOES write COG-scoped completion artifacts under:
+#   .../precip/daily/cog/metadata/...
+#   .../precip/daily/cog/signals/...
+#
+# These markers mean the durable COG stage is complete. They do NOT mean the
+# browser-delivery / PMTiles render is complete.
 #
 # This stage DOES NOT write:
-#   render _SUCCESS
-#   render.json
+#   PMTiles _SUCCESS
 #   latest.json
 #   radar_frames.json
 #
-# Those are written only after the complete render chain succeeds.
+# Public/browser manifests are written only after the complete render chain
+# succeeds.
 # ==============================================================================
 
 suppressPackageStartupMessages({
@@ -45,6 +57,25 @@ suppressPackageStartupMessages({
   library(paws)
   library(jsonlite)
 })
+
+# ==============================================================================
+# EXTERNAL GDAL TOOLS
+# ==============================================================================
+#
+# The Docker image installs gdal-bin, so these should resolve from PATH.
+# We use gdal_translate explicitly for final COG creation and gdalinfo for QA.
+# ==============================================================================
+
+GDAL_TRANSLATE <- Sys.which("gdal_translate")
+GDALINFO <- Sys.which("gdalinfo")
+
+if (!nzchar(GDAL_TRANSLATE)) {
+  stop("gdal_translate was not found on PATH.")
+}
+
+if (!nzchar(GDALINFO)) {
+  stop("gdalinfo was not found on PATH.")
+}
 
 # ==============================================================================
 # HELPERS
@@ -176,6 +207,85 @@ s3_object_exists <- function(s3, bucket, key) {
       FALSE
     }
   )
+}
+
+
+verify_object_size <- function(
+    s3,
+    bucket,
+    key,
+    expected_bytes
+) {
+
+  head <- s3$head_object(
+    Bucket = bucket,
+    Key = key
+  )
+
+  actual_bytes <- as.numeric(
+    head$ContentLength
+  )
+
+  if (
+    !is.finite(actual_bytes) ||
+    actual_bytes != expected_bytes
+  ) {
+    stop(
+      "S3 object size verification failed for:\n",
+      "s3://", bucket, "/", key,
+      "\nExpected bytes: ", expected_bytes,
+      "\nActual bytes:   ", actual_bytes
+    )
+  }
+
+  invisible(head)
+}
+
+
+put_raw <- function(
+    s3,
+    bucket,
+    key,
+    body,
+    content_type,
+    cache_control = NULL
+) {
+
+  args <- list(
+    Bucket = bucket,
+    Key = key,
+    Body = body,
+    ContentType = content_type
+  )
+
+  if (
+    !is.null(cache_control) &&
+    nzchar(cache_control)
+  ) {
+    args$CacheControl <- cache_control
+  }
+
+  do.call(
+    s3$put_object,
+    args
+  )
+
+  invisible(TRUE)
+}
+
+
+verify_object_exists <- function(
+    s3,
+    bucket,
+    key
+) {
+
+  s3$head_object(
+    Bucket = bucket,
+    Key = key
+  )
+
+  invisible(TRUE)
 }
 
 download_s3_object <- function(
@@ -555,6 +665,34 @@ REQUIRE_FULL_CELL_MATCH <- isTRUE(
 COG_CACHE_CONTROL <- cog_cfg$cache_control %||%
   "public,max-age=31536000,immutable"
 
+# COG-scoped metadata / signal paths. These can be promoted into
+# render_config.json later as explicit storage keys; the defaults preserve the
+# product-local layout:
+#
+#   cog/
+#     year=...
+#     metadata/year=.../render.json
+#     signals/year=.../_SUCCESS
+#     signals/cycle/cycle=.../_SUCCESS
+#
+COG_METADATA_TEMPLATE <- storage_cfg$cog_metadata_key %||%
+  paste0(
+    "CONUS_subset/production_areas/{area_id}/precip/daily/cog/",
+    "metadata/year={YYYY}/month={MM}/day={DD}/render.json"
+  )
+
+COG_SUCCESS_TEMPLATE <- storage_cfg$cog_success_key %||%
+  paste0(
+    "CONUS_subset/production_areas/{area_id}/precip/daily/cog/",
+    "signals/year={YYYY}/month={MM}/day={DD}/_SUCCESS"
+  )
+
+COG_CYCLE_SUCCESS_TEMPLATE <- storage_cfg$cog_cycle_success_key %||%
+  paste0(
+    "CONUS_subset/production_areas/{area_id}/precip/daily/cog/",
+    "signals/cycle/cycle={cycle}/_SUCCESS"
+  )
+
 # Recreate S3 client using the resolved region.
 s3 <- paws::s3(
   config = list(
@@ -602,6 +740,21 @@ COG_KEY <- render_template(
   template_values
 )
 
+COG_METADATA_KEY <- render_template(
+  COG_METADATA_TEMPLATE,
+  template_values
+)
+
+COG_SUCCESS_KEY <- render_template(
+  COG_SUCCESS_TEMPLATE,
+  template_values
+)
+
+COG_CYCLE_SUCCESS_KEY <- render_template(
+  COG_CYCLE_SUCCESS_TEMPLATE,
+  template_values
+)
+
 # ==============================================================================
 # LOCAL SCRATCH LAYOUT
 # ==============================================================================
@@ -637,6 +790,11 @@ LOCAL_COG <- file.path(
   "stage4_daily.tif"
 )
 
+TEMP_GTIF <- file.path(
+  COG_DIR,
+  "stage4_daily_tmp.tif"
+)
+
 dir.create(
   SOURCE_DIR,
   recursive = TRUE,
@@ -665,6 +823,8 @@ message("Date ID:                  ", DATE_ID)
 message("Resolved config file:     ", LOCAL_CONFIG)
 message("Work root:                ", WORK_ROOT)
 message("AWS region:               ", AWS_REGION)
+message("gdal_translate:           ", GDAL_TRANSLATE)
+message("gdalinfo:                 ", GDALINFO)
 
 message("")
 message("Numerical success:")
@@ -700,6 +860,33 @@ message(
   RENDER_BUCKET,
   "/",
   COG_KEY
+)
+
+message("")
+message("COG metadata:")
+message(
+  "  s3://",
+  RENDER_BUCKET,
+  "/",
+  COG_METADATA_KEY
+)
+
+message("")
+message("COG date success:")
+message(
+  "  s3://",
+  RENDER_BUCKET,
+  "/",
+  COG_SUCCESS_KEY
+)
+
+message("")
+message("COG cycle success:")
+message(
+  "  s3://",
+  RENDER_BUCKET,
+  "/",
+  COG_CYCLE_SUCCESS_KEY
 )
 
 message("")
@@ -1002,48 +1189,98 @@ if (anyDuplicated(cells$grib_id) > 0) {
 # ==============================================================================
 # 4. JOIN RAINFALL TO HRAP
 # ==============================================================================
+#
+# IMPORTANT FOOTPRINT RULE:
+#   The configured AOI geometry defines the raster footprint.
+#   Missing rain_mm values must NOT shrink the output extent.
+#
+#   We therefore preserve every AOI cell through the join, use ALL AOI cells
+#   to determine projection / resolution / raster extent, and use only finite
+#   rain_mm cells when rasterizing rainfall values.
+# ==============================================================================
 
 message("")
 message("==============================================================")
 message("4. JOINING RAINFALL TO HRAP")
 message("==============================================================")
 
-rain_sf <- cells |>
-  inner_join(
-    precip |>
-      select(
-        grib_id,
-        rain_mm
-      ),
+precip_join <- precip |>
+  select(
+    grib_id,
+    rain_mm
+  ) |>
+  mutate(
+    precip_match = TRUE
+  )
+
+rain_sf_all <- cells |>
+  left_join(
+    precip_join,
     by = "grib_id"
   )
 
-message(
-  "Joined HRAP cells:   ",
-  format(
-    nrow(rain_sf),
-    big.mark = ","
-  )
+matched_cell_count <- sum(
+  rain_sf_all$precip_match %in% TRUE
+)
+
+missing_match_count <- nrow(cells) -
+  matched_cell_count
+
+rain_na_count <- sum(
+  !is.finite(rain_sf_all$rain_mm)
+)
+
+rain_finite_count <- sum(
+  is.finite(rain_sf_all$rain_mm)
 )
 
 message(
-  "Expected HRAP cells: ",
+  "AOI HRAP cells:       ",
   format(
     nrow(cells),
     big.mark = ","
   )
 )
 
-missing_cell_count <- nrow(cells) -
-  nrow(rain_sf)
+message(
+  "Matched parquet IDs:  ",
+  format(
+    matched_cell_count,
+    big.mark = ","
+  )
+)
 
-if (missing_cell_count != 0) {
+message(
+  "Missing parquet IDs:  ",
+  format(
+    missing_match_count,
+    big.mark = ","
+  )
+)
+
+message(
+  "Finite rain values:   ",
+  format(
+    rain_finite_count,
+    big.mark = ","
+  )
+)
+
+message(
+  "NA/non-finite rain:   ",
+  format(
+    rain_na_count,
+    big.mark = ","
+  )
+)
+
+if (missing_match_count != 0) {
 
   msg <- paste0(
-    "Joined row count does not equal AOI HRAP row count. ",
+    "AOI cells are missing matching grib_id rows in the daily parquet. ",
     "Missing matched cells: ",
     format(
-      missing_cell_count,
+      missing_match_count,
       big.mark = ","
     ),
     "."
@@ -1056,7 +1293,34 @@ if (missing_cell_count != 0) {
   }
 }
 
-rain_sf <- rain_sf |>
+if (rain_finite_count == 0) {
+  stop(
+    "No finite rainfall cells remain after join."
+  )
+}
+
+# ==============================================================================
+# 5. PROJECT FULL AOI TO WEB MERCATOR
+# ==============================================================================
+
+message("")
+message("==============================================================")
+message("5. PROJECTING FULL AOI TO EPSG:3857")
+message("==============================================================")
+
+# Keep every configured AOI cell here.  This object is the authoritative
+# footprint for the raster, even when some rain_mm values are NA.
+rain_sf_all <- rain_sf_all |>
+  select(
+    -precip_match
+  ) |>
+  st_make_valid() |>
+  st_transform(
+    crs = 3857
+  )
+
+# Finite rainfall cells are a value/support subset of the fixed AOI footprint.
+rain_sf <- rain_sf_all |>
   filter(
     is.finite(rain_mm)
   ) |>
@@ -1064,39 +1328,18 @@ rain_sf <- rain_sf |>
     support = 1
   )
 
-if (nrow(rain_sf) == 0) {
-  stop(
-    "No finite rainfall cells remain after join."
-  )
-}
-
 # ==============================================================================
-# 5. PROJECT TO WEB MERCATOR
+# 6. ESTIMATE NATIVE HRAP RASTER RESOLUTION FROM FULL AOI
 # ==============================================================================
 
 message("")
 message("==============================================================")
-message("5. PROJECTING TO EPSG:3857")
-message("==============================================================")
-
-rain_sf <- rain_sf |>
-  st_make_valid() |>
-  st_transform(
-    crs = 3857
-  )
-
-# ==============================================================================
-# 6. ESTIMATE NATIVE HRAP RASTER RESOLUTION
-# ==============================================================================
-
-message("")
-message("==============================================================")
-message("6. ESTIMATING NATIVE RASTER")
+message("6. ESTIMATING NATIVE RASTER FROM FULL AOI")
 message("==============================================================")
 
 cell_area_m2 <- suppressWarnings(
   as.numeric(
-    st_area(rain_sf)
+    st_area(rain_sf_all)
   )
 )
 
@@ -1132,15 +1375,24 @@ message(
 )
 
 # ==============================================================================
-# 7. CREATE NATIVE RASTER TEMPLATE
+# 7. CREATE FIXED NATIVE RASTER TEMPLATE FROM FULL AOI
 # ==============================================================================
+#
+# v_aoi defines the geographic footprint.
+# v_rain contains only cells with finite rainfall and is used for values.
+# This keeps extent/dimensions stable from cycle to cycle.
+# ==============================================================================
+
+v_aoi <- terra::vect(
+  rain_sf_all
+)
 
 v_rain <- terra::vect(
   rain_sf
 )
 
 e <- terra::ext(
-  v_rain
+  v_aoi
 )
 
 e <- terra::ext(
@@ -1260,8 +1512,25 @@ message(
 
 message("--------------------------------------------------------------")
 
+message("")
+message(
+  "Fixed AOI footprint source: all ",
+  format(nrow(rain_sf_all), big.mark = ","),
+  " configured cells"
+)
+message(
+  "Rainfall value/support source: ",
+  format(nrow(rain_sf), big.mark = ","),
+  " finite cells"
+)
+
 # ==============================================================================
 # 8. RASTERIZE ORIGINAL STAGE IV
+# ==============================================================================
+#
+# Do not use touches=TRUE with aggregation functions here.  terra warns that
+# touches and aggregate rasterization cannot be combined.  The native template
+# is derived from the full AOI and the normal polygon rasterization is used.
 # ==============================================================================
 
 message("")
@@ -1276,7 +1545,6 @@ r_native <- terra::rasterize(
   r_template,
   field = "rain_mm",
   background = NA,
-  touches = TRUE,
   fun = "mean"
 )
 
@@ -1285,7 +1553,6 @@ r_support <- terra::rasterize(
   r_template,
   field = "support",
   background = NA,
-  touches = TRUE,
   fun = "max"
 )
 
@@ -1549,13 +1816,22 @@ if (
 }
 
 # ==============================================================================
-# 13. WRITE CANONICAL LOCAL COG
+# 13. WRITE TEMPORARY GEOTIFF
+# ==============================================================================
+#
+# terra writes a plain GeoTIFF here.  We intentionally do NOT ask terra to
+# create the final COG because that previously produced misleading MEM-driver
+# creation-option warnings.  GDAL creates the canonical COG in the next step.
 # ==============================================================================
 
 message("")
 message("==============================================================")
-message("13. WRITING CANONICAL LOCAL COG")
+message("13. WRITING TEMPORARY GEOTIFF")
 message("==============================================================")
+
+if (file.exists(TEMP_GTIF)) {
+  unlink(TEMP_GTIF)
+}
 
 if (
   file.exists(LOCAL_COG) &&
@@ -1567,28 +1843,37 @@ if (
   )
 }
 
+if (
+  file.exists(LOCAL_COG) &&
+  OVERWRITE_COG
+) {
+  unlink(LOCAL_COG)
+}
+
 t0 <- Sys.time()
 
 terra::writeRaster(
   r_smooth,
-  LOCAL_COG,
-  overwrite = OVERWRITE_COG,
-  filetype = "COG",
+  TEMP_GTIF,
+  overwrite = TRUE,
+  filetype = "GTiff",
   datatype = "FLT4S",
   NAflag = -9999,
   gdal = c(
-    "COMPRESS=DEFLATE",
-    "LEVEL=6",
-    "BLOCKSIZE=512",
-    "OVERVIEWS=AUTO",
-    "RESAMPLING=AVERAGE",
-    "BIGTIFF=IF_SAFER",
-    "NUM_THREADS=ALL_CPUS"
+    "TILED=YES",
+    "BIGTIFF=IF_SAFER"
   )
 )
 
+if (!file.exists(TEMP_GTIF)) {
+  stop(
+    "Temporary GeoTIFF was not created:\n",
+    TEMP_GTIF
+  )
+}
+
 message(
-  "COG write seconds: ",
+  "Temporary GeoTIFF write seconds: ",
   round(
     as.numeric(
       difftime(
@@ -1602,20 +1887,150 @@ message(
 )
 
 # ==============================================================================
-# 14. READ FINAL COG BACK FOR QA
+# 14. CREATE + VALIDATE CANONICAL COG WITH GDAL
 # ==============================================================================
 
 message("")
 message("==============================================================")
-message("14. READING FINAL COG BACK FOR QA")
+message("14. CREATING CANONICAL COG WITH GDAL")
 message("==============================================================")
+
+message("gdal_translate: ", GDAL_TRANSLATE)
+message("gdalinfo:       ", GDALINFO)
+
+translate_args <- c(
+  "-of", "COG",
+  "-co", "COMPRESS=DEFLATE",
+  "-co", "LEVEL=6",
+  "-co", "BLOCKSIZE=512",
+  "-co", "OVERVIEWS=AUTO",
+  "-co", "RESAMPLING=AVERAGE",
+  "-co", "BIGTIFF=IF_SAFER",
+  "-co", "NUM_THREADS=ALL_CPUS",
+  TEMP_GTIF,
+  LOCAL_COG
+)
+
+t0 <- Sys.time()
+
+translate_status <- system2(
+  GDAL_TRANSLATE,
+  args = translate_args
+)
+
+if (!identical(translate_status, 0L)) {
+  stop(
+    "gdal_translate failed with exit status ",
+    translate_status
+  )
+}
 
 if (!file.exists(LOCAL_COG)) {
   stop(
-    "COG was not created:\n",
+    "Canonical COG was not created:\n",
     LOCAL_COG
   )
 }
+
+message(
+  "COG creation seconds: ",
+  round(
+    as.numeric(
+      difftime(
+        Sys.time(),
+        t0,
+        units = "secs"
+      )
+    ),
+    2
+  )
+)
+
+# ------------------------------------------------------------------------------
+# GDAL structural QA
+# ------------------------------------------------------------------------------
+
+gdalinfo_text <- system2(
+  GDALINFO,
+  args = c(
+    "-json",
+    LOCAL_COG
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+)
+
+gdalinfo_status <- attr(
+  gdalinfo_text,
+  "status"
+)
+
+if (
+  !is.null(gdalinfo_status) &&
+  !identical(gdalinfo_status, 0L)
+) {
+  stop(
+    "gdalinfo failed with exit status ",
+    gdalinfo_status
+  )
+}
+
+gdalinfo_json <- jsonlite::fromJSON(
+  paste(
+    gdalinfo_text,
+    collapse = "\n"
+  ),
+  simplifyVector = FALSE
+)
+
+image_structure <- gdalinfo_json$metadata$IMAGE_STRUCTURE %||% list()
+
+cog_layout <- image_structure$LAYOUT %||% ""
+cog_compression <- image_structure$COMPRESSION %||% ""
+
+if (!identical(cog_layout, "COG")) {
+  stop(
+    "GDAL QA failed: expected IMAGE_STRUCTURE LAYOUT=COG, got: ",
+    if (nzchar(cog_layout)) cog_layout else "<missing>"
+  )
+}
+
+if (!identical(cog_compression, "DEFLATE")) {
+  stop(
+    "GDAL QA failed: expected DEFLATE compression, got: ",
+    if (nzchar(cog_compression)) cog_compression else "<missing>"
+  )
+}
+
+overview_count <- 0L
+
+if (
+  length(gdalinfo_json$bands) >= 1 &&
+  !is.null(gdalinfo_json$bands[[1]]$overviews)
+) {
+  overview_count <- length(
+    gdalinfo_json$bands[[1]]$overviews
+  )
+}
+
+if (overview_count < 1L) {
+  stop(
+    "GDAL QA failed: canonical COG has no internal overviews."
+  )
+}
+
+message("")
+message("GDAL COG QA:")
+message("  Layout:       ", cog_layout)
+message("  Compression:  ", cog_compression)
+message("  Overviews:    ", overview_count)
+
+# ------------------------------------------------------------------------------
+# Read final COG back with terra for value / raster QA
+# ------------------------------------------------------------------------------
+
+message("")
+message("Reading final COG back with terra:")
 
 cog_check <- terra::rast(
   LOCAL_COG
@@ -1640,7 +2055,6 @@ cog_size_mb <- file.info(
 )$size / 1024^2
 
 message("")
-
 message(
   "COG file size: ",
   round(
@@ -1681,16 +2095,45 @@ if (
   )
 }
 
+if (
+  cog_stats[1, "min"] < -1e-6
+) {
+  stop(
+    "Final COG contains negative rainfall values."
+  )
+}
+
+# ------------------------------------------------------------------------------
+# Clean temporary GeoTIFF only after final COG passes QA
+# ------------------------------------------------------------------------------
+
+if (file.exists(TEMP_GTIF)) {
+  unlink(TEMP_GTIF)
+}
+
 # ==============================================================================
-# 15. UPLOAD CANONICAL COG
+# 15. UPLOAD CANONICAL COG + COG-SCOPED COMPLETION ARTIFACTS
 # ==============================================================================
 
 if (UPLOAD_COG) {
 
   message("")
   message("==============================================================")
-  message("15. UPLOADING CANONICAL COG")
+  message("15A. UPLOADING CANONICAL COG")
   message("==============================================================")
+
+  COG_SIZE_BYTES <- as.numeric(
+    file.info(LOCAL_COG)$size
+  )
+
+  if (
+    !is.finite(COG_SIZE_BYTES) ||
+    COG_SIZE_BYTES <= 0
+  ) {
+    stop(
+      "Local COG has invalid file size."
+    )
+  }
 
   s3$put_object(
     Bucket = RENDER_BUCKET,
@@ -1700,35 +2143,240 @@ if (UPLOAD_COG) {
     CacheControl = COG_CACHE_CONTROL
   )
 
-  if (!s3_object_exists(
+  verify_object_size(
     s3 = s3,
     bucket = RENDER_BUCKET,
-    key = COG_KEY
-  )) {
-    stop(
-      "COG upload completed without a readable S3 object:\n",
-      "s3://",
-      RENDER_BUCKET,
-      "/",
-      COG_KEY
-    )
-  }
+    key = COG_KEY,
+    expected_bytes = COG_SIZE_BYTES
+  )
 
   message("")
-  message("Uploaded:")
-
+  message("Uploaded and verified:")
   message(
     "s3://",
     RENDER_BUCKET,
     "/",
     COG_KEY
   )
+  message(
+    "COG bytes: ",
+    format(
+      COG_SIZE_BYTES,
+      big.mark = ","
+    )
+  )
+
+  # ---------------------------------------------------------------------------
+  # 15B. WRITE COG METADATA
+  # ---------------------------------------------------------------------------
+
+  message("")
+  message("==============================================================")
+  message("15B. WRITING COG METADATA")
+  message("==============================================================")
+
+  cog_extent <- list(
+    xmin = as.numeric(
+      terra::xmin(cog_check)
+    ),
+    xmax = as.numeric(
+      terra::xmax(cog_check)
+    ),
+    ymin = as.numeric(
+      terra::ymin(cog_check)
+    ),
+    ymax = as.numeric(
+      terra::ymax(cog_check)
+    )
+  )
+
+  cog_resolution <- terra::res(
+    cog_check
+  )
+
+  cog_metadata <- list(
+    schema_version = 1L,
+    artifact = "cog",
+    area_id = AREA_ID,
+    cycle = CYCLE_ID,
+    map_date = DATE_ID,
+    product = "stage4_daily",
+    created_utc = format(
+      Sys.time(),
+      tz = "UTC",
+      format = "%Y-%m-%dT%H:%M:%SZ"
+    ),
+
+    upstream = list(
+      numerical_success = paste0(
+        "s3://",
+        DATA_BUCKET,
+        "/",
+        SUCCESS_KEY
+      ),
+      daily_parquet = paste0(
+        "s3://",
+        DATA_BUCKET,
+        "/",
+        PRECIP_KEY
+      ),
+      cells = paste0(
+        "s3://",
+        DATA_BUCKET,
+        "/",
+        CELLS_KEY
+      )
+    ),
+
+    output = list(
+      cog = paste0(
+        "s3://",
+        RENDER_BUCKET,
+        "/",
+        COG_KEY
+      ),
+      content_type = "image/tiff",
+      bytes = COG_SIZE_BYTES,
+      epsg = 3857L,
+      rows = terra::nrow(
+        cog_check
+      ),
+      cols = terra::ncol(
+        cog_check
+      ),
+      resolution_x = as.numeric(
+        cog_resolution[[1]]
+      ),
+      resolution_y = as.numeric(
+        cog_resolution[[2]]
+      ),
+      extent = cog_extent,
+      compression = cog_compression,
+      overview_count = overview_count
+    ),
+
+    smoothing = list(
+      upsample_factor = SMOOTH_UPSAMPLE_FACT,
+      radius_cells = SMOOTH_RADIUS_CELLS,
+      sigma_cells = if (
+        is.na(SMOOTH_SIGMA_CELLS)
+      ) {
+        NULL
+      } else {
+        SMOOTH_SIGMA_CELLS
+      }
+    ),
+
+    qa = list(
+      aoi_cell_count = nrow(
+        rain_sf_all
+      ),
+      matched_parquet_ids = matched_cell_count,
+      finite_rain_values = rain_finite_count,
+      nonfinite_rain_values = rain_na_count,
+      min_rain_mm = as.numeric(
+        cog_stats[1, "min"]
+      ),
+      mean_rain_mm = as.numeric(
+        cog_stats[1, "mean"]
+      ),
+      max_rain_mm = as.numeric(
+        cog_stats[1, "max"]
+      )
+    )
+  )
+
+  cog_metadata_text <- jsonlite::toJSON(
+    cog_metadata,
+    auto_unbox = TRUE,
+    pretty = TRUE,
+    null = "null"
+  )
+
+  cog_metadata_raw <- charToRaw(
+    paste0(
+      cog_metadata_text,
+      "\n"
+    )
+  )
+
+  put_raw(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_METADATA_KEY,
+    body = cog_metadata_raw,
+    content_type = "application/json",
+    cache_control = "no-cache"
+  )
+
+  verify_object_size(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_METADATA_KEY,
+    expected_bytes = length(
+      cog_metadata_raw
+    )
+  )
+
+  message("Uploaded and verified COG render.json:")
+  message(
+    "s3://",
+    RENDER_BUCKET,
+    "/",
+    COG_METADATA_KEY
+  )
+
+  # ---------------------------------------------------------------------------
+  # 15C. WRITE COG _SUCCESS MARKERS LAST
+  # ---------------------------------------------------------------------------
+
+  message("")
+  message("==============================================================")
+  message("15C. WRITING COG _SUCCESS MARKERS")
+  message("==============================================================")
+
+  # Date marker first.
+  put_raw(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_SUCCESS_KEY,
+    body = raw(0),
+    content_type = "application/octet-stream",
+    cache_control = "no-cache"
+  )
+
+  verify_object_exists(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_SUCCESS_KEY
+  )
+
+  message("Wrote COG date _SUCCESS.")
+
+  # Cycle marker is intentionally the final durable write from Stage 01.
+  # Downstream Container B can gate on this marker.
+  put_raw(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_CYCLE_SUCCESS_KEY,
+    body = raw(0),
+    content_type = "application/octet-stream",
+    cache_control = "no-cache"
+  )
+
+  verify_object_exists(
+    s3 = s3,
+    bucket = RENDER_BUCKET,
+    key = COG_CYCLE_SUCCESS_KEY
+  )
+
+  message("Wrote COG cycle _SUCCESS LAST.")
 
 } else {
 
   message("")
   message(
-    "upload_cog = FALSE; skipped S3 upload."
+    "upload_cog = FALSE; skipped COG upload, metadata, and COG success markers."
   )
 }
 
@@ -1757,6 +2405,12 @@ message(
 
 message("")
 
+message("")
+message("COG metadata: s3://", RENDER_BUCKET, "/", COG_METADATA_KEY)
+message("COG date success: s3://", RENDER_BUCKET, "/", COG_SUCCESS_KEY)
+message("COG cycle success: s3://", RENDER_BUCKET, "/", COG_CYCLE_SUCCESS_KEY)
+message("")
 message(
-  "Stage 01 complete. No render _SUCCESS or manifest was written."
+  "Stage 01 complete. COG-scoped metadata and success markers were written; ",
+  "PMTiles/public manifests were not."
 )

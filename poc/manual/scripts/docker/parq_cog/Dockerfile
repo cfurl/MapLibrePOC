@@ -59,22 +59,16 @@ RUN Rscript -e \
 
 ENV APP_HOME=/app
 ENV WORK_DIR=/work
-
 ENV AWS_REGION=us-east-2
-
 ENV RENDER_CONFIG_BUCKET=stg4-24hr-large-area-render
 ENV RENDER_CONFIG_KEY=CONUS_subset/config/render/large_area/render_config.json
 
 WORKDIR ${APP_HOME}
 
-RUN mkdir -p \
-    ${APP_HOME}/scripts \
-    ${WORK_DIR}
+RUN mkdir -p ${APP_HOME}/scripts ${WORK_DIR}
 
-COPY 01_parquet_to_cog.R \
-     ${APP_HOME}/scripts/01_parquet_to_cog.R
+# The file in the build folder is named exactly:
+#   01_parquet_to_cog_cycle.R
+COPY 01_parquet_to_cog_cycle.R /app/scripts/01_parquet_to_cog_cycle.R
 
-ENTRYPOINT [
-  "Rscript",
-  "/app/scripts/01_parquet_to_cog.R"
-]
+ENTRYPOINT ["Rscript", "/app/scripts/01_parquet_to_cog_cycle.R"]

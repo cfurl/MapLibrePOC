@@ -1,0 +1,1 @@
+docker build -t stg4-render-frame:latest .
