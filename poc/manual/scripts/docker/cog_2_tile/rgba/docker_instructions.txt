@@ -1,18 +1,18 @@
-docker build -t stg4-render-stage01:latest .
+docker build -t stg4-render-frame:latest .
 
 5. put in on the registry
 
 docker login --username cfurl
-docker image tag stg4-render-stage01:latest cfurl/01-cog-single-day:v1
-docker image push cfurl/01-cog-single-day:v1
+docker image tag stg4-render-frame:latest cfurl/02-pmtile-single-day:v1
+docker image push cfurl/02-pmtile-single-day:v1
 
 # ============================================================
 # PUSH EXISTING DOCKER HUB IMAGE TO AWS ECR
 # Docker Hub:
-#   cfurl/01-cog-single-day:v1
+#   cfurl/02-pmtile-single-day:v1
 #
 # ECR:
-#   stg4-24hr-large-area-render:01-cog-single-day-v1
+#   stg4-24hr-large-area-render:02-pmtile-single-day-v1
 # ============================================================
 
 $ErrorActionPreference = "Stop"
@@ -37,9 +37,9 @@ $Repo = "stg4-24hr-large-area-render"
 # IMAGE SETTINGS
 # ------------------------------------------------------------
 
-$DockerHubImage = "cfurl/01-cog-single-day:v1"
+$DockerHubImage = "cfurl/02-pmtile-single-day:v1"
 
-$EcrTag = "01-cog-single-day-v1"
+$EcrTag = "02-pmtile-single-day-v1"
 
 $EcrImage = "$EcrHost/${Repo}:$EcrTag"
 
