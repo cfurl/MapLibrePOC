@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "area_id": "texas",
+  "product": "stage4_daily",
+  "trigger_cycle": "2026100512",
+  "updated_utc": "2026-10-05T16:55:23Z",
+  "window": {
+    "start_cycle": "2026092912",
+    "end_cycle": "2026100512",
+    "cadence_hours": 24,
+    "expected_count": 7,
+    "available_count": 4
+  },
+  "missing_cycles": [
+    "2026092912",
+    "2026093012",
+    "2026100112"
+  ],
+  "browser_defaults": {
+    "playback_ms": 750,
+    "latest_only": false,
+    "loop": true
+  },
+  "frames": [
+    {
+      "cycle": "2026100212",
+      "date": "2026-10-02",
+      "pmtiles": "https://cfhydromet.com/CONUS_subset/production_areas/texas/precip/daily/pmtiles/year=2026/month=10/day=02/stage4_daily.pmtiles"
+    },
+    {
+      "cycle": "2026100312",
+      "date": "2026-10-03",
+      "pmtiles": "https://cfhydromet.com/CONUS_subset/production_areas/texas/precip/daily/pmtiles/year=2026/month=10/day=03/stage4_daily.pmtiles"
+    },
+    {
+      "cycle": "2026100412",
+      "date": "2026-10-04",
+      "pmtiles": "https://cfhydromet.com/CONUS_subset/production_areas/texas/precip/daily/pmtiles/year=2026/month=10/day=04/stage4_daily.pmtiles"
+    },
+    {
+      "cycle": "2026100512",
+      "date": "2026-10-05",
+      "pmtiles": "https://cfhydromet.com/CONUS_subset/production_areas/texas/precip/daily/pmtiles/year=2026/month=10/day=05/stage4_daily.pmtiles"
+    }
+  ]
+}

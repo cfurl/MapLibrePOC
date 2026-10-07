@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "area_id": "serfc",
+  "product": "stage4_daily",
+  "cadence_hours": 24,
+  "window_steps": 7,
+  "signals_prefix": "CONUS_subset/production_areas/serfc/precip/daily/pmtiles/signals/cycle",
+  "pmtiles_prefix": "CONUS_subset/production_areas/serfc/precip/daily/pmtiles",
+  "manifest_key": "CONUS_subset/production_areas/serfc/precip/daily/pmtiles/manifests/radar_frames.json",
+  "public_base_url": "https://cfhydromet.com",
+  "browser_defaults": {
+    "playback_ms": 750,
+    "latest_only": false,
+    "loop": true
+  }
+}

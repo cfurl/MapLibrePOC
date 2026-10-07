@@ -1,0 +1,77 @@
+docker build -t stg4-render:latest .
+
+5. put in on the registry
+
+docker login --username cfurl
+docker image tag stg4-render:latest cfurl/03-build-single-day-radar_frames:v1
+docker image push cfurl/03-build-single-day-radar_frames:v1
+
+# ============================================================
+# PUSH EXISTING DOCKER HUB IMAGE TO AWS ECR
+# Docker Hub:
+#   cfurl/03-build-single-day-radar_frames:v1
+#
+# ECR:
+#   stg4-24hr-large-area-render:03-build-single-day-radar_frames-v1
+# ============================================================
+
+$ErrorActionPreference = "Stop"
+
+# ------------------------------------------------------------
+# AWS SETTINGS
+# ------------------------------------------------------------
+
+$Profile = "stg4-admin-chad"
+$Region  = "us-east-2"
+
+$AccountId = aws sts get-caller-identity `
+    --query Account `
+    --output text `
+    --profile $Profile
+
+$EcrHost = "$AccountId.dkr.ecr.$Region.amazonaws.com"
+
+$Repo = "stg4-24hr-large-area-render"
+
+# ------------------------------------------------------------
+# IMAGE SETTINGS
+# ------------------------------------------------------------
+
+$DockerHubImage = "cfurl/03-build-single-day-radar_frames:v1"
+
+$EcrTag = "03-build-single-day-radar_frames-v1"
+
+$EcrImage = "$EcrHost/${Repo}:$EcrTag"
+
+# ------------------------------------------------------------
+# LOGIN TO ECR
+# ------------------------------------------------------------
+
+aws ecr get-login-password `
+    --region $Region `
+    --profile $Profile |
+    docker login `
+        --username AWS `
+        --password-stdin $EcrHost
+
+# ------------------------------------------------------------
+# TAG LOCAL DOCKER HUB IMAGE FOR ECR
+# ------------------------------------------------------------
+
+docker tag `
+    $DockerHubImage `
+    $EcrImage
+
+# ------------------------------------------------------------
+# PUSH TO ECR
+# ------------------------------------------------------------
+
+docker push $EcrImage
+
+# ------------------------------------------------------------
+# SHOW RESULT
+# ------------------------------------------------------------
+
+Write-Host ""
+Write-Host "Pushed to ECR:"
+Write-Host $EcrImage

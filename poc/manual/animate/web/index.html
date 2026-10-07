@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>STG4 Rainfall Animation</title>
+
+  <link href="https://unpkg.com/maplibre-gl@5.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+
+  <style>
+    html, body, #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+    }
+
+    #map {
+      position: fixed;
+      inset: 0;
+    }
+
+    .controls {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      max-width: calc(100vw - 24px);
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(8px);
+    }
+
+    .controls button,
+    .controls select {
+      font: inherit;
+      padding: 7px 10px;
+    }
+
+    .status {
+      min-width: 165px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .date-label {
+      font-weight: 700;
+    }
+
+    .error {
+      color: #a40000;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div class="controls">
+    <button id="playPauseBtn" type="button">Play</button>
+    <button id="prevBtn" type="button">◀ Previous</button>
+    <button id="nextBtn" type="button">Next ▶</button>
+    <button id="latestBtn" type="button">Latest</button>
+
+    <label>
+      Speed
+      <select id="speedSelect">
+        <option value="250">250 ms</option>
+        <option value="500">500 ms</option>
+        <option value="750">750 ms</option>
+        <option value="1000">1000 ms</option>
+        <option value="1500">1500 ms</option>
+      </select>
+    </label>
+
+    <div class="status">
+      <span id="areaLabel"></span>
+      <span id="dateLabel" class="date-label"></span>
+      <span id="frameLabel"></span>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
